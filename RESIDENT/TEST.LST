@@ -1,0 +1,170 @@
+Turbo Assembler	 Version 4.1	    02/29/24 14:13:03	    Page 1
+test.asm
+
+
+
+      1				     .286
+      2	0000			     .model tiny
+      3	0000			     .code
+      4
+      5				     locals @@
+      6
+      7				     org 100h
+      8
+      9				     ; при старте печатает свой cs	и раскладывает по	    +
+     10				     регистрам	111 2222 3333 и т д
+     11	0100			     Start:
+     12
+     13	0100  B4 09			     mov ah, 09h
+     14	0102  BA 0190r			     mov dx, offset RegString
+     15	0105  CD 21			     int 21h
+     16
+     17	0107  0E			     push cs ; dx = cs
+     18	0108  5B			     pop  bx
+     19
+     20	0109  E8 0017			     call PrintW
+     21	010C			     @@Next:
+     22	010C  B8 1111			     mov ax, 1111h
+     23	010F  BB 2222			     mov bx, 2222h
+     24	0112  B9 3333			     mov cx, 3333h
+     25	0115  BA 4444			     mov dx, 4444h
+     26
+     27	0118  E4 60			     in	al, 60h
+     28	011A  3C 01			     cmp al, 1d	; esc
+     29	011C  75 EE			     jne @@Next
+     30
+     31	011E  B8 4C00			     mov ax, 4c00h
+     32	0121  CD 21			     int 21h
+     33
+     34				     ;-----------------------------------------------------------------------------------
+     35				     ; print 2-byte word
+     36				     ; Entry:
+     37				     ;	     bx	- word
+     38				     ;
+     39				     ;-----------------------------------------------------------------------------------
+     40	0123			     PrintW proc
+     41	0123  50 53 52 56 1E		     push ax bx	dx si ds
+     42
+     43	0128  0E			     push cs ; ds = cs
+     44	0129  1F			     pop  ds
+     45
+     46	012A  B4 02			     mov ah, 02h     ; Int 21h func - display char
+     47
+     48					     ; ------------ | *	_ _ _ |	------------
+     49
+     50	012C  8B C3			     mov ax, bx
+     51	012E  BE 0180r			     mov si, offset HexNums
+     52
+     53	0131  8A C4			     mov al, ah
+     54	0133  32 E4			     xor ah, ah
+     55	0135  24 F0			     and al, 0f0h
+     56	0137  C0 E8 04			     shr al, 4
+     57
+Turbo Assembler	 Version 4.1	    02/29/24 14:13:03	    Page 2
+test.asm
+
+
+
+     58	013A  03 F0			     add si, ax
+     59
+     60	013C  B4 02			     mov ah, 02h
+     61	013E  8A 14			     mov dl, [si]
+     62	0140  CD 21			     int 21h
+     63
+     64					     ; ------------ | *	* _ _ |	------------
+     65
+     66	0142  8B C3			     mov ax, bx
+     67	0144  BE 0180r			     mov si, offset HexNums
+     68
+     69	0147  8A C4			     mov al, ah
+     70	0149  32 E4			     xor ah, ah
+     71	014B  24 0F			     and al, 0fh
+     72
+     73	014D  03 F0			     add si, ax
+     74
+     75	014F  B4 02			     mov ah, 02h
+     76	0151  8A 14			     mov dl, [si]
+     77	0153  CD 21			     int 21h
+     78
+     79					     ; ------------ | *	* * _ |	------------
+     80
+     81	0155  8B C3			     mov ax, bx
+     82	0157  BE 0180r			     mov si, offset HexNums
+     83
+     84	015A  32 E4			     xor ah, ah
+     85	015C  24 F0			     and al, 0f0h
+     86	015E  C0 E8 04			     shr al, 4
+     87
+     88	0161  03 F0			     add si, ax
+     89
+     90	0163  B4 02			     mov ah, 02h
+     91	0165  8A 14			     mov dl, [si]
+     92	0167  CD 21			     int 21h
+     93
+     94					     ; ------------ | *	* * * |	------------
+     95
+     96	0169  8B C3			     mov ax, bx
+     97	016B  BE 0180r			     mov si, offset HexNums
+     98
+     99	016E  32 E4			     xor ah, ah
+    100	0170  24 0F			     and al, 0fh
+    101
+    102	0172  03 F0			     add si, ax
+    103
+    104	0174  B4 02			     mov ah, 02h
+    105	0176  8A 14			     mov dl, [si]
+    106	0178  CD 21			     int 21h
+    107
+    108	017A  1F 5E 5A 5B 58		     pop  ds si	dx bx ax
+    109
+    110	017F  C3			     ret
+    111
+    112	0180  30 31 32 33 34 35	36+  HexNums db	'0123456789abcdef'
+    113	      37 38 39 61 62 63	64+
+    114	      65 66
+Turbo Assembler	 Version 4.1	    02/29/24 14:13:03	    Page 3
+test.asm
+
+
+
+    115
+    116	0190			     PrintW endp
+    117
+    118	0190  63 73 20 3D 20 24	     RegString db 'cs =	$'
+    119				     end     Start
+Turbo Assembler	 Version 4.1	    02/29/24 14:13:03	    Page 4
+Symbol Table
+
+
+
+
+Symbol Name			  Type	 Value
+
+??DATE				  Text	 "02/29/24"
+??FILENAME			  Text	 "test	  "
+??TIME				  Text	 "14:13:03"
+??VERSION			  Number 040A
+@32BIT				  Text	 0
+@@NEXT				  Near	 DGROUP:010C
+@CODE				  Text	 DGROUP
+@CODESIZE			  Text	 0
+@CPU				  Text	 0707H
+@CURSEG				  Text	 _TEXT
+@DATA				  Text	 DGROUP
+@DATASIZE			  Text	 0
+@FILENAME			  Text	 TEST
+@INTERFACE			  Text	 000H
+@MODEL				  Text	 1
+@STACK				  Text	 DGROUP
+@WORDSIZE			  Text	 2
+HEXNUMS				  Byte	 DGROUP:0180
+PRINTW				  Near	 DGROUP:0123
+REGSTRING			  Byte	 DGROUP:0190
+START				  Near	 DGROUP:0100
+
+Groups & Segments		  Bit Size Align  Combine Class
+
+DGROUP				  Group
+  _DATA				  16  0000 Word	  Public  DATA
+  _TEXT				  16  0196 Word	  Public  CODE
+

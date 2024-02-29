@@ -1,0 +1,554 @@
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 1
+frame.asm
+
+
+
+      1				     .286
+      2	0000			     .model tiny
+      3	0000			     .code
+      4				     locals @@
+      5
+      6				     org 100h
+      7
+      8
+      9	0100			     Start:
+     10					     ; ------------ IRQ	1 - KEYBOARD ------------
+     11
+     12	0100  B8 3509			     mov ax, 3509h		     ; get interrupt vector (es	- segment, bx -	offset)
+     13	0103  CD 21			     int 21h
+     14
+     15	0105  89 1E 0172r		     mov Old09Ofs, bx		     ; save old	offset
+     16	0109  8C C3			     mov bx, es
+     17	010B  89 1E 0174r		     mov Old09Seg, bx		     ; save old	segment
+     18
+     19	010F  FA			     cli			     ; block interrupts
+     20
+     21	0110  BB 0024			     mov bx, 4 * 09h
+     22	0113  6A 00			     push 0			     ; es = 0 -	PSP
+     23	0115  07			     pop es
+     24
+     25	0116  26: C7 07	0150r		     mov es:[bx], offset HotkeyFrame09
+     26
+     27	011B  0E			     push cs			     ; ax = cs
+     28	011C  58			     pop  ax
+     29
+     30	011D  26: 89 47	02		     mov es:[bx+2], ax		     ; segment
+     31
+     32	0121  FB			     sti			     ; allow interrupts
+     33
+     34					     ; ------------ IRQ	0 - TIMER ------------
+     35
+     36	0122  B8 3508			     mov ax, 3508h		     ; get interrupt vector (es	- segment, bx -	offset)
+     37	0125  CD 21			     int 21h
+     38
+     39	0127  89 1E 01A3r		     mov Old08Ofs, bx		     ; save old	offset
+     40	012B  8C C3			     mov bx, es
+     41	012D  89 1E 01A5r		     mov Old08Seg, bx		     ; save old	segment
+     42
+     43	0131  FA			     cli			     ; block interrupts
+     44
+     45	0132  BB 0020			     mov bx, 4 * 08h
+     46	0135  6A 00			     push 0			     ; es = 0 -	PSP
+     47	0137  07			     pop es
+     48
+     49	0138  26: C7 07	0176r		     mov es:[bx], offset RefreshFrame08
+     50
+     51	013D  0E			     push cs			     ; ax = cs
+     52	013E  58			     pop  ax
+     53
+     54	013F  26: 89 47	02		     mov es:[bx+2], ax		     ; segment
+     55
+     56	0143  FB			     sti			     ; allow interrupts
+     57
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 2
+frame.asm
+
+
+
+     58					     ; ------------ PROGRAM TERMINATION	------------
+     59	0144  BA 02F8r			     mov dx, offset EndOfProgram     ; terminate and stay resident
+     60	0147  C1 EA 04			     shr dx, 4
+     61	014A  42			     inc dx
+     62	014B  B8 3100			     mov ax, 3100h
+     63	014E  CD 21			     int 21h
+     64
+     65				     ;-----------------------------------------------------------------------------------
+     66				     ; Int 09h extension which draws frame with	current	register values	when hotkey is pressed
+     67				     ;
+     68				     ; Destr: -
+     69				     ; QUESTION: is it ok to push ax once and then pop it twice	(in different places)?
+     70				     ;-----------------------------------------------------------------------------------
+     71	0150			     HotkeyFrame09   proc
+     72	0150  50			     push ax		     ; save ax
+     73
+     74	0151  E4 60			     in	 al, 60h
+     75	0153  3C 53 90 90		     cmp al, HOTKEY_SCN_CODE
+     76	0157  75 17			     jne @@Std09
+     77
+     78	0159  2E: C6 06	02EFr 01  +	     mov cs:IsFrameOn, 1d    ; raise flag
+     79	      90
+     80
+     81	0160  E4 61			     in	 al, 61h	     ; blink Most Significant Bit (MSB)	in kybd	port controller
+     82	0162  0C 80			     or	 al, 80h
+     83	0164  E6 61			     out 61h, al
+     84	0166  24 7F			     and al, 7fh
+     85	0168  E6 61			     out 61h, al
+     86
+     87	016A  B0 20			     mov al, 20h	     ; set end of interrupt
+     88	016C  E6 20			     out 20h, al
+     89
+     90	016E  58			     pop ax		     ; recover ax
+     91
+     92	016F  CF			     iret
+     93
+     94	0170			     @@Std09:
+     95	0170  58			     pop ax		     ; recover ax
+     96	0171  EA				     db	0eah ; jmp far
+     97	0172  0000		     Old09Ofs	     dw	0d   ; offset
+     98	0174  0000		     Old09Seg	     dw	0d   ; segment
+     99
+    100	0176			     HotkeyFrame09   endp
+    101
+    102				     ;-----------------------------------------------------------------------------------
+    103				     ; Int 08h extenstion which	refreshes the frame if IsFrameOn flag is raised
+    104				     ;
+    105				     ; Notes:
+    106				     ;	     ds	= cs inside this procedure
+    107				     ;-----------------------------------------------------------------------------------
+    108	0176			     RefreshFrame08  proc
+    109	0176  2E: 80 3E	02EFr 00	     cmp cs:IsFrameOn, 0d    ; if flag is down - jmp to	std Int	08
+    110	017C  74 24			     je	@@Std08
+    111								     ; else draw frame
+    112					     ; ------------------------------------------------------------------
+    113	017E  16 06 1E 54 55 57	56+	     push ss es	ds sp bp di si dx cx bx	ax
+    114	      52 51 53 50
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 3
+frame.asm
+
+
+
+    115	0189  8B EC			     mov bp, sp		     ; bp is restored later (see big pop section)
+    116
+    117	018B  0E			     push cs		     ; ds = cs
+    118	018C  1F			     pop ds
+    119
+    120	018D  68 B800			     push 0b800h	     ; es = 0b800h - vmem
+    121	0190  07			     pop  es
+    122
+    123	0191  E8 00A6			     call DrwFrm
+    124	0194  E8 0010			     call WrtRegs
+    125
+    126	0197  58 5B 59 5A 5E 5F	5D+	     pop ax bx cx dx si	di bp sp ds es ss
+    127	      5C 1F 07 17
+    128					     ; ------------------------------------------------------------------
+    129
+    130								     ; finally do std Int 08 no	matter what
+    131	01A2			     @@Std08:
+    132	01A2  EA				     db	0eah ; jmp far
+    133	01A3  0000		     Old08Ofs	     dw	0d   ; offset
+    134	01A5  0000		     Old08Seg	     dw	0d   ; segment
+    135
+    136	01A7			     RefreshFrame08  endp
+    137
+    138				     ;-----------------------------------------------------------------------------------
+    139				     ; given the frame is drawn, write text with registers and their values inside
+    140				     ;
+    141				     ; Entry:
+    142				     ;	     AH	- color	attribute
+    143				     ;	     SI	- registers control string offset
+    144				     ;
+    145				     ; Assumes:
+    146				     ;	     ES	= 0b800h - VMem
+    147				     ;	     DS	= CS
+    148				     ; Destr: -
+    149				     ;-----------------------------------------------------------------------------------
+    150	01A7			     WrtRegs proc
+    151	01A7  53 51 57 56		     push bx cx	di si
+    152
+    153	01AB  E8 00D2			     call SetFrmBase	     ; bx = top	left corner of the frame
+    154	01AE  E8 00E3			     call SetBXNewLine	     ; go next line
+    155	01B1  83 C3 04			     add  bx, 4d	     ; skip border and space symbol
+    156
+    157	01B4  8B FB			     mov di, bx
+    158	01B6  BE 02B2r			     mov si, offset RegNames ; axbxcx....
+    159
+    160	01B9  B9 000D 90		     mov  cx, NREGS	     ; all the regs as in turbodebugger
+    161	01BD			     @@Next:
+    162	01BD  E8 000C			     call WrtReg	     ; write ax: dead
+    163	01C0  E8 00D1			     call SetBXNewLine	     ; go next line
+    164	01C3  8B FB			     mov  di, bx
+    165	01C5  E2 F6			     loop @@Next
+    166
+    167	01C7  5E 5F 59 5B		     pop si di cx bx
+    168
+    169	01CB  C3			     ret
+    170	01CC			     WrtRegs endp
+    171
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 4
+frame.asm
+
+
+
+    172				     ;-----------------------------------------------------------------------------------
+    173				     ;Entry:
+    174				     ;	     AH	- color	attribute
+    175				     ;	     SI	- registers control string offset
+    176				     ;	     DI	- beginning position on	screen
+    177				     ;
+    178				     ;Assumes:
+    179				     ;	     ES	= 0b800h - VMem
+    180				     ;	     DS	= CS
+    181				     ;	     BP	points to position in stack where saved	register values	are
+    182				     ;Destr: DI, SI, BP
+    183				     ;-----------------------------------------------------------------------------------
+    184	01CC			     WrtReg  proc
+    185	01CC  50			     push ax
+    186
+    187					     ; -------------------------- WRITE	REGISTER NAME --------------------------
+    188	01CD  AC			     lodsb			     ; frst letter
+    189	01CE  AB			     stosw
+    190
+    191	01CF  AC			     lodsb
+    192	01D0  AB			     stosw			     ; scnd letter
+    193
+    194	01D1  26: C6 05	3A		     mov byte ptr es:[di], 58d	     ; ':' colon
+    195	01D5  83 C7 02			     add di, 2
+    196
+    197	01D8  26: C6 05	20		     mov byte ptr es:[di], 32d	     ; whitespace
+    198	01DC  83 C7 02			     add di, 2
+    199
+    200					     ; -------------------------- WRITE	REGISTER VALUE --------------------------
+    201
+    202	01DF  E8 0002			     call WrtRegVal
+    203
+    204	01E2  58			     pop ax
+    205
+    206	01E3  C3			     ret
+    207	01E4			     WrtReg  endp
+    208
+    209				     ;-----------------------------------------------------------------------------------
+    210				     ;Entry:
+    211				     ;	     BP	- index	of register in stack (ax is at 0)
+    212				     ;
+    213				     ;Assumes:
+    214				     ;	     ES	= 0b800h
+    215				     ;	     DS	= CS
+    216				     ;Destr: BP
+    217				     ;-----------------------------------------------------------------------------------
+    218	01E4			     WrtRegVal	     proc
+    219	01E4  50 52 56			     push ax dx	si
+    220
+    221	01E7  8B 46 00			     mov ax, [bp]	     ; ax = ss:[bp]
+    222	01EA  8B D0			     mov dx, ax		     ; save original reg value
+    223
+    224	01EC  BE 02CCr			     mov si, offset HexNums
+    225
+    226					     ; ------------ | *	_ _ _ |	------------
+    227
+    228	01EF  8A C4			     mov al, ah
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 5
+frame.asm
+
+
+
+    229	01F1  32 E4			     xor ah, ah
+    230
+    231	01F3  24 F0			     and al, 11110000b
+    232	01F5  C0 E8 04			     shr al, 4d
+    233
+    234	01F8  BE 02CCr			     mov si, offset HexNums
+    235	01FB  03 F0			     add si, ax
+    236	01FD  B4 4E			     mov ah, 4eh
+    237	01FF  AC			     lodsb
+    238	0200  AB			     stosw
+    239
+    240					     ; ------------ | *	* _ _ |	------------
+    241
+    242	0201  8B C2			     mov ax, dx		     ; restore original	reg value
+    243	0203  8A C4			     mov al, ah
+    244	0205  32 E4			     xor ah, ah
+    245	0207  24 0F			     and al, 00001111b
+    246
+    247	0209  BE 02CCr			     mov si, offset HexNums
+    248	020C  03 F0			     add si, ax
+    249	020E  B4 4E			     mov ah, 4eh
+    250	0210  AC			     lodsb
+    251	0211  AB			     stosw
+    252
+    253					     ; ------------ | *	* * _ |	------------
+    254
+    255	0212  8B C2			     mov ax, dx		     ; restore original	reg value
+    256	0214  32 E4			     xor ah, ah
+    257	0216  24 F0			     and al, 11110000b
+    258	0218  C0 E8 04			     shr al, 4d
+    259
+    260	021B  BE 02CCr			     mov si, offset HexNums
+    261	021E  03 F0			     add si, ax
+    262	0220  B4 4E			     mov ah, 4eh
+    263	0222  AC			     lodsb
+    264	0223  AB			     stosw
+    265
+    266					     ; ------------ | *	* * * |	------------
+    267
+    268	0224  8B C2			     mov ax, dx		     ; restore original	reg value
+    269	0226  32 E4			     xor ah, ah
+    270	0228  24 0F			     and al, 00001111b
+    271
+    272	022A  BE 02CCr			     mov si, offset HexNums
+    273	022D  03 F0			     add si, ax
+    274	022F  B4 4E			     mov ah, 4eh
+    275	0231  AC			     lodsb
+    276	0232  AB			     stosw
+    277
+    278	0233  83 C5 02			     add bp, 2		     ; bp points to next register in stack   !!!
+    279
+    280	0236  5E 5A 58			     pop si dx ax
+    281
+    282	0239  C3			     ret
+    283	023A			     WrtRegVal	     endp
+    284
+    285				     ;-----------------------------------------------------------------------------------
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 6
+frame.asm
+
+
+
+    286				     ;Entry:
+    287				     ;	     AH	- color	attribute
+    288				     ;	     SI	- control string offset
+    289				     ;
+    290				     ;Assumes:
+    291				     ;	     ES	= 0b800h - VMem
+    292				     ;	     DS	= CS
+    293				     ;Destr: -
+    294				     ;-----------------------------------------------------------------------------------
+    295	023A			     DrwFrm  proc
+    296	023A  53 51 56 57		     push bx cx	si di
+    297
+    298	023E  B4 4E 90 90		     mov ah, CLR_ATTR	     ; set color attribute
+    299	0242  BE 02A9r			     mov si, offset CntrlString
+    300
+    301	0245  E8 0038			     call SetFrmBase	     ; bx points to top	left corner of the frame
+    302	0248  8B FB			     mov  di, bx
+    303
+    304	024A  E8 0021			     call WrtLine	     ; first line
+    305	024D  E8 0044			     call SetBXNewLine
+    306	0250  8B FB			     mov  di, bx
+    307
+    308	0252  8B 0E 02F4r		     mov cx, F_HIGHT
+    309	0256  83 C6 03			     add si, 3		     ; after sub si will be the	same
+    310	0259			     @@Next:
+    311	0259  83 EE 03			     sub  si, 3		     ; offset =	beginning of mid section of Control String
+    312	025C  E8 000F			     call WrtLine	     ; mid line
+    313	025F  E8 0032			     call SetBXNewLine
+    314	0262  8B FB			     mov  di, bx
+    315
+    316	0264  E2 F3			     loop @@Next
+    317
+    318	0266  E8 0005			     call WrtLine	     ; last line
+    319
+    320	0269  5F 5E 59 5B		     pop di si cx bx
+    321
+    322	026D  C3			     ret
+    323	026E			     DrwFrm  endp
+    324
+    325				     ;-----------------------------------------------------------------------------------
+    326				     ;Entry:
+    327				     ;	     AH	- color	attribute
+    328				     ;	     DS	- segment where	Control	String is
+    329				     ;	     SI	- offset to Control String
+    330				     ;	     DI	- beginning position on	screen
+    331				     ;Assumes:
+    332				     ;	     ES	= 0b800h - VMem
+    333				     ;
+    334				     ;Destr: DI, SI, DF
+    335				     ;-----------------------------------------------------------------------------------
+    336	026E			     WrtLine proc
+    337	026E  50 51			     push ax cx
+    338
+    339	0270  FC			     cld
+    340
+    341	0271  AC			     lodsb   ; first symbol of the line
+    342	0272  AB			     stosw
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 7
+frame.asm
+
+
+
+    343
+    344	0273  AC			     lodsb
+    345	0274  8B 0E 02F6r		     mov cx, F_WIDTH
+    346	0278			     @@Next:
+    347	0278  AB			     stosw   ; middle symbol
+    348	0279  E2 FD			     loop @@Next
+    349
+    350	027B  AC			     lodsb   ; last symbol
+    351	027C  AB			     stosw
+    352
+    353	027D  59 58			     pop cx ax
+    354
+    355	027F  C3			     ret
+    356
+    357	0280			     WrtLine endp
+    358
+    359				     ;-----------------------------------------------------------------------------------
+    360				     ; set bx to point to position on screen where frame begins	(top left corner)
+    361				     ;Assumes: -
+    362				     ;Returns:
+    363				     ;	     bx	- required position on screen
+    364				     ;Destr: bx
+    365				     ;-----------------------------------------------------------------------------------
+    366	0280			     SetFrmBase	     proc
+    367	0280  8B 1E 02F0r		     mov  bx, T_OFFSET
+    368	0284  69 DB 00A0		     imul bx, 2	* W_WDTH
+    369	0288  03 1E 02F2r		     add  bx, L_OFFSET
+    370	028C  03 1E 02F2r		     add  bx, L_OFFSET
+    371	0290  83 E3 FE			     and  bx, not 1h
+    372
+    373	0293  C3			     ret
+    374	0294			     SetFrmBase	     endp
+    375
+    376				     ;-----------------------------------------------------------------------------------
+    377				     ; set bx to point to the same position of the next	line
+    378				     ;Assumes: -
+    379				     ;Returns:
+    380				     ;	     bx	- required position on screen
+    381				     ;Destr: bx
+    382				     ;-----------------------------------------------------------------------------------
+    383	0294			     SetBXNewLine      proc
+    384
+    385	0294  81 C3 00A0		     add bx, 2 * 80d
+    386	0298  C3			     ret
+    387	0299			     SetBXNewLine     endp
+    388
+    389				     ;-----------------------------------------------------------------------------------
+    390				     ;
+    391				     ;
+    392				     ;-----------------------------------------------------------------------------------
+    393	0299			     WrtDbgMsg	     proc
+    394	0299  50 52 1E			     push ax dx	ds
+    395
+    396	029C  0E			     push cs ; ds = cs
+    397	029D  1F			     pop  ds
+    398
+    399	029E  BA 02DCr			     mov dx, offset DbgString
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 8
+frame.asm
+
+
+
+    400	02A1  B4 09			     mov ah, 09h
+    401	02A3  CD 21			     int 21h
+    402
+    403	02A5  1F 5A 58			     pop  ds dx	ax
+    404	02A8  C3			     ret
+    405	02A9			     WrtDbgMsg	     endp
+    406
+    407	02A9  C9 CD BB BA 20 BA	C8+  CntrlString     db	0c9h, 0cdh, 0bbh, 0bah,	32d, 0bah, 0c8h, 0cdh, 0bch
+    408	      CD BC
+    409
+    410	02B2  61 78		     RegNames	     db	 'ax'
+    411	02B4  62 78				     db	 'bx'
+    412	02B6  63 78				     db	 'cx'
+    413	02B8  64 78				     db	 'dx'
+    414	02BA  73 69				     db	 'si'
+    415	02BC  64 69				     db	 'di'
+    416	02BE  62 70				     db	 'bp'
+    417	02C0  73 70				     db	 'sp'
+    418	02C2  64 73				     db	 'ds'
+    419	02C4  65 73				     db	 'es'
+    420	02C6  73 73				     db	 'ss'
+    421	02C8  69 70				     db	 'ip'
+    422	02CA  63 73				     db	 'cs'
+    423	02CC  30 31 32 33 34 35	36+  HexNums	     db	'0123456789abcdef'
+    424	      37 38 39 61 62 63	64+
+    425	      65 66
+    426	02DC  64 65 62 75 67 20	69+  DbgString	     db	'debug is debil	bug$'
+    427	      73 20 64 65 62 69	6C+
+    428	      20 62 75 67 24
+    429
+    430	      =000D		     NREGS	     equ 13d
+    431	      =0053		     HOTKEY_SCN_CODE equ 83d	    ; 'del' scan code
+    432	      =0050		     W_WDTH	     equ 80d
+    433	      =004E		     CLR_ATTR	     equ 4eh
+    434
+    435	02EF  00		     IsFrameOn	     db	0d
+    436
+    437	02F0  0001		     T_OFFSET	     dw	1d
+    438	02F2  0001		     L_OFFSET	     dw	1d
+    439	02F4  000D		     F_HIGHT	     dw	13d
+    440	02F6  000B		     F_WIDTH	     dw	11d
+    441
+    442	02F8			     EndOfProgram:
+    443
+    444				     end     Start
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 9
+Symbol Table
+
+
+
+
+Symbol Name			  Type	 Value
+
+??DATE				  Text	 "02/29/24"
+??FILENAME			  Text	 "frame	  "
+??TIME				  Text	 "14:27:03"
+??VERSION			  Number 040A
+@32BIT				  Text	 0
+@@NEXT				  Near	 DGROUP:01BD
+@@NEXT				  Near	 DGROUP:0259
+@@NEXT				  Near	 DGROUP:0278
+@@STD08				  Near	 DGROUP:01A2
+@@STD09				  Near	 DGROUP:0170
+@CODE				  Text	 DGROUP
+@CODESIZE			  Text	 0
+@CPU				  Text	 0707H
+@CURSEG				  Text	 _TEXT
+@DATA				  Text	 DGROUP
+@DATASIZE			  Text	 0
+@FILENAME			  Text	 FRAME
+@INTERFACE			  Text	 000H
+@MODEL				  Text	 1
+@STACK				  Text	 DGROUP
+@WORDSIZE			  Text	 2
+CLR_ATTR			  Number 004E
+CNTRLSTRING			  Byte	 DGROUP:02A9
+DBGSTRING			  Byte	 DGROUP:02DC
+DRWFRM				  Near	 DGROUP:023A
+ENDOFPROGRAM			  Near	 DGROUP:02F8
+F_HIGHT				  Word	 DGROUP:02F4
+F_WIDTH				  Word	 DGROUP:02F6
+HEXNUMS				  Byte	 DGROUP:02CC
+HOTKEYFRAME09			  Near	 DGROUP:0150
+HOTKEY_SCN_CODE			  Number 0053
+ISFRAMEON			  Byte	 DGROUP:02EF
+L_OFFSET			  Word	 DGROUP:02F2
+NREGS				  Number 000D
+OLD08OFS			  Word	 DGROUP:01A3
+OLD08SEG			  Word	 DGROUP:01A5
+OLD09OFS			  Word	 DGROUP:0172
+OLD09SEG			  Word	 DGROUP:0174
+REFRESHFRAME08			  Near	 DGROUP:0176
+REGNAMES			  Byte	 DGROUP:02B2
+SETBXNEWLINE			  Near	 DGROUP:0294
+SETFRMBASE			  Near	 DGROUP:0280
+START				  Near	 DGROUP:0100
+T_OFFSET			  Word	 DGROUP:02F0
+WRTDBGMSG			  Near	 DGROUP:0299
+WRTLINE				  Near	 DGROUP:026E
+WRTREG				  Near	 DGROUP:01CC
+WRTREGS				  Near	 DGROUP:01A7
+WRTREGVAL			  Near	 DGROUP:01E4
+W_WDTH				  Number 0050
+Turbo Assembler	 Version 4.1	    02/29/24 14:27:03	    Page 10
+Symbol Table
+
+
+
+
+Groups & Segments		  Bit Size Align  Combine Class
+
+DGROUP				  Group
+  _DATA				  16  0000 Word	  Public  DATA
+  _TEXT				  16  02F8 Word	  Public  CODE
+

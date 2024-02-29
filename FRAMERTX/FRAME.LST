@@ -1,0 +1,515 @@
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 1
+frame.asm
+
+
+
+      1	0000			     .model tiny
+      2	0000			     .code
+      3				     .286
+      4
+      5				     locals @@
+      6
+      7				     org 100h
+      8
+      9	0100			     Start:
+     10	0100  FC			     cld
+     11	0101  BB B800			     mov bx, 0b800h
+     12	0104  8E C3			     mov es, bx
+     13	0106  33 DB			     xor bx, bx
+     14
+     15	0108  E8 00D3			     call RdCmdLn
+     16
+     17	010B  E8 0048			     call SetTLOfst
+     18
+     19	010E  8A 26 02B8r		     mov ah, CLR_ATTRIBUTE   ; color attribute
+     20	0112  8B 36 02B9r		     mov si, OFFST_FRAME
+     21
+     22	0116  E8 0005			     call WrtFrm
+     23
+     24	0119  B8 4C00			     mov ax, 4c00h
+     25	011C  CD 21			     int 21h
+     26
+     27				     ;---------------------------------------------------------
+     28				     ;Entry:
+     29				     ;	     AH	- color	attribute
+     30				     ;	     SI	- control string offset
+     31				     ;Assumes:
+     32				     ;	     ES	= 0b800h - VMem
+     33				     ;
+     34				     ;Destr:
+     35				     ;	     CX, SI
+     36				     ;---------------------------------------------------------
+     37	011E			     WrtFrm  proc
+     38
+     39	011E  E8 004E			     call SetOfst
+     40	0121  E8 0020			     call WrtLine    ; first line
+     41
+     42	0124  8B 0E 02BDr		     mov cx, F_HIGHT
+     43	0128  83 C6 03			     add si, 3	     ; after sub si will be the	same
+     44	012B			     @@Next:
+     45	012B  83 EE 03			     sub si, 3	     ; offset =	beginning of mid section of Control String
+     46
+     47	012E  E8 0085			     call NxtOfst
+     48	0131  E8 0010			     call WrtLine    ; mid line
+     49
+     50	0134  E2 F5			     loop @@Next
+     51
+     52	0136  E8 007D			     call NxtOfst
+     53	0139  E8 0008			     call WrtLine    ; last line
+     54
+     55	013C  8B 36 02BBr		     mov si, OFFST_TEXT
+     56	0140  E8 007E			     call WrtText
+     57
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 2
+frame.asm
+
+
+
+     58	0143  C3			     ret
+     59	0144				     endp
+     60
+     61				     ;------------------------------------
+     62				     ;Entry:
+     63				     ;	     AH	- color	attribute
+     64				     ;	     SI	- offset to Control String
+     65				     ;	     DI	- beginning position on	screen
+     66				     ;Assumes:
+     67				     ;	     ES	= 0b800h - VMem
+     68				     ;
+     69				     ;Destr: AL, DI, SI, CX
+     70				     ;------------------------------------
+     71	0144			     WrtLine proc
+     72
+     73	0144  FC			     cld
+     74	0145  51			     push cx
+     75	0146  33 C9			     xor cx, cx
+     76
+     77	0148  AC			     lodsb
+     78	0149  AB			     stosw
+     79
+     80	014A  AC			     lodsb
+     81	014B  8B 0E 02BFr		     mov cx, F_WIDTH
+     82	014F			     @@Next:
+     83	014F  AB			     stosw
+     84	0150  E2 FD			     loop @@Next
+     85
+     86	0152  AC			     lodsb
+     87	0153  AB			     stosw
+     88
+     89	0154  59			     pop cx
+     90
+     91	0155  C3			     ret
+     92	0156				     endp
+     93
+     94				     ;------------------------------------
+     95				     ;calc top and left	offset variables so as to
+     96				     ;place frame is in	the center
+     97				     ;Returns:
+     98				     ;
+     99				     ;Destr:
+    100				     ;------------------------------------
+    101	0156			     SetTLOfst	     proc
+    102	0156  A1 02B6r			     mov ax, W_WDTH
+    103	0159  2B 06 02BFr		     sub ax, F_WIDTH
+    104	015D  D1 E8			     shr ax, 1d
+    105	015F  A3 02C3r			     mov word ptr L_OFFSET, ax
+    106
+    107	0162  A1 02B4r			     mov ax, W_HGHT
+    108	0165  2B 06 02BDr		     sub ax, F_HIGHT
+    109	0169  D1 E8			     shr ax, 1d
+    110	016B  A3 02C1r			     mov word ptr T_OFFSET, ax
+    111
+    112	016E  C3			     ret
+    113	016F				     endp
+    114
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 3
+frame.asm
+
+
+
+    115				     ;------------------------------------
+    116				     ;set DI to	point to beginning of the new line
+    117				     ;Returns:
+    118				     ;	     BX	= DI - line beginning offset
+    119				     ;		  in VMem since	which first line begins
+    120				     ;Destr: BX, DI
+    121				     ;------------------------------------
+    122	016F			     SetOfst proc
+    123
+    124	016F  8B 1E 02C1r		     mov bx, T_OFFSET
+    125	0173  4B			     dec bx	     ; to make the frame closer	to top than bottom
+    126	0174  6B DB 50			     imul bx, 80d
+    127	0177  6B DB 02			     imul bx, 2d
+    128	017A  03 1E 02C3r		     add bx, L_OFFSET
+    129	017E  03 1E 02C3r		     add bx, L_OFFSET
+    130	0182  83 EB 02			     sub bx, 2	     ; to make the frame closer	to the left than right
+    131
+    132	0185  8B FB			     mov di, bx
+    133
+    134	0187  C3			     ret
+    135	0188				     endp
+    136
+    137				     ;------------------------------------
+    138				     ;set DI to	point to beginning of the text section
+    139				     ;Returns:
+    140				     ;	     DI	- position since which frame text begins
+    141				     ;Destr: BX
+    142				     ;------------------------------------
+    143	0188			     SetOfstText     proc
+    144	0188  E8 FFE4			     call SetOfst    ; di = frame beginning
+    145
+    146	018B  8B 1E 02BDr		     mov bx, F_HIGHT
+    147	018F  D1 EB			     shr bx, 1h
+    148	0191  69 DB 00A0		     imul bx, 160d
+    149	0195  03 FB			     add di, bx	     ; di = beginning of middle	line
+    150
+    151	0197  83 C7 02			     add di, 2	     ; di = beginning of the inside of the frame mid line
+    152
+    153	019A  57			     push di	     ; preparations b4 strlen call
+    154	019B  8C DF			     mov di, ds
+    155	019D  8E C7			     mov es, di	     ; set es =	ds
+    156	019F  8B FE			     mov di, si	     ; set string offset
+    157
+    158	01A1  E8 00CA			     call MyStrLen
+    159
+    160	01A4  BF B800			     mov di, 0b800h
+    161	01A7  8E C7			     mov es, di	     ; recover es
+    162	01A9  5F			     pop di	     ; recover di
+    163
+    164	01AA  8B D8			     mov bx, ax	     ; string len
+    165	01AC  80 E3 FE			     and bl, 0feh
+    166	01AF  03 3E 02BFr		     add di, F_WIDTH ; move to center of the frame
+    167	01B3  2B FB			     sub di, bx	     ; shift left
+    168
+    169	01B5  C3			     ret
+    170	01B6				     endp
+    171
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 4
+frame.asm
+
+
+
+    172				     ;------------------------------------
+    173				     ;set DI to	point to beginning of the next line
+    174				     ;Returns:
+    175				     ;	     BX	= DI - beginning index
+    176				     ;		  in VMem since	which line begins
+    177				     ;Destr: BX, DI
+    178				     ;------------------------------------
+    179	01B6			     NxtOfst proc
+    180
+    181	01B6  03 1E 02B6r		     add bx, W_WDTH
+    182	01BA  03 1E 02B6r		     add bx, W_WDTH
+    183
+    184	01BE  8B FB			     mov di, bx
+    185
+    186	01C0  C3			     ret
+    187	01C1				     endp
+    188
+    189				     ;------------------------------------
+    190				     ;write text in the	top left angle (or middle*) of the frame
+    191				     ;Entry:
+    192				     ;	     SI	- offset to the	string
+    193				     ;Assumes:
+    194				     ;	     ES	= 0b800h - VMem
+    195				     ;Destr: BX, DI
+    196				     ;------------------------------------
+    197	01C1			     WrtText proc
+    198	01C1  E8 FFC4			     call    SetOfstText
+    199
+    200	01C4  80 3C 0D			     cmp byte ptr [si],	0dh  ; \n
+    201	01C7  74 14			     je	@@EndFunc
+    202	01C9			     @@Next:
+    203	01C9  A4			     movsb
+    204
+    205	01CA  80 3C 0D			     cmp byte ptr [si],	0dh  ; \n
+    206	01CD  74 0E			     je	@@EndFunc
+    207
+    208	01CF  50			     push ax
+    209	01D0  A0 02B8r			     mov al, CLR_ATTRIBUTE
+    210	01D3  26: 88 05			     mov byte ptr es:[di], al
+    211	01D6  58			     pop  ax
+    212
+    213	01D7  47			     inc di
+    214	01D8  80 3C 0D			     cmp byte ptr [si],	0dh  ; \n
+    215	01DB  75 EC			     jne @@Next
+    216
+    217	01DD			     @@EndFunc:
+    218	01DD  C3			     ret
+    219	01DE				     endp
+    220
+    221				     ;------------------------------------
+    222				     ;Entry:
+    223				     ;Assumes:
+    224				     ;	     ES	= 0b800h
+    225				     ;
+    226				     ;Destr: AX, BX, CX, DX
+    227				     ;
+    228				     ;------------------------------------
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 5
+frame.asm
+
+
+
+    229	01DE			     RdCmdLn proc
+    230	01DE  33 C0			     xor ax, ax
+    231	01E0  33 DB			     xor bx, bx
+    232	01E2  33 C9			     xor cx, cx
+    233	01E4  33 D2			     xor dx, dx
+    234
+    235	01E6  BE 0080			     mov si, 80h
+    236	01E9  8A 0C			     mov cl, [si]
+    237	01EB  BE 0081			     mov si, 81h
+    238
+    239	01EE  46			     inc si ; skip first space
+    240
+    241	01EF  E8 0036			     call GetNmbr    ; get frame width
+    242	01F2  89 16 02BFr		     mov F_WIDTH, dx
+    243
+    244	01F6  E8 002F			     call GetNmbr    ; get frame hight
+    245	01F9  89 16 02BDr		     mov F_HIGHT, dx
+    246
+    247	01FD  E8 003E			     call GetHex     ; get frame color attribute
+    248	0200  88 16 02B8r		     mov CLR_ATTRIBUTE,	dl
+    249
+    250	0204  80 3C 2A			     cmp byte ptr [si],	'*'
+    251	0207  74 11			     je	@@NewFrame
+    252
+    253	0209  E8 001C			     call GetNmbr    ; get number of control string
+    254
+    255	020C  B8 027Er			     mov ax, offset CntrlStringArr
+    256	020F  6B D2 09			     imul dx, 9
+    257	0212  03 C2			     add ax, dx
+    258	0214  A3 02B9r			     mov OFFST_FRAME, ax
+    259
+    260	0217  EB 0A 90		     jmp @@FuncEnd
+    261	021A			     @@NewFrame:
+    262
+    263	021A  46			     inc si ; skip *
+    264	021B  89 36 02B9r		     mov OFFST_FRAME, si
+    265
+    266	021F  83 C6 09			     add si, 9
+    267	0222  46			     inc si ; skip space
+    268
+    269	0223			     @@FuncEnd:
+    270	0223  89 36 02BBr		     mov OFFST_TEXT, si
+    271
+    272	0227  C3			     ret
+    273	0228				     endp
+    274
+    275				     ;------------------------------------
+    276				     ;Entry:
+    277				     ;	     SI	- offset to number beginning
+    278				     ;Returns:
+    279				     ;	     DX	- desired number
+    280				     ;Destr: AX, DX
+    281				     ;------------------------------------
+    282	0228			     GetNmbr proc
+    283	0228  33 C0			     xor ax, ax
+    284	022A  33 D2			     xor dx, dx
+    285	022C			     @@Next:
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 6
+frame.asm
+
+
+
+    286	022C  80 3C 20			     cmp byte ptr [si],	' '
+    287	022F  74 0B			     je	@@Stop
+    288
+    289	0231  6B D2 0A			     imul dx, 10d
+    290	0234  AC			     lodsb
+    291	0235  2D 0030			     sub ax, '0'
+    292	0238  03 D0			     add dx, ax
+    293
+    294	023A  EB F0			     jmp @@Next
+    295	023C			     @@Stop:
+    296
+    297	023C  46			     inc si ; skip space
+    298
+    299	023D  C3			     ret
+    300	023E				     endp
+    301
+    302				     ;------------------------------------
+    303				     ;Entry:
+    304				     ;	     SI	- offset to number beginning
+    305				     ;
+    306				     ;Returns:
+    307				     ;	     DX	- desired number
+    308				     ;Destr: AX, DX
+    309				     ;------------------------------------
+    310	023E			     GetHex  proc
+    311	023E  33 C0			     xor ax, ax
+    312	0240  33 D2			     xor dx, dx
+    313	0242			     @@Next:
+    314	0242  80 3C 20			     cmp byte ptr [si],	' '
+    315	0245  74 1F			     je	@@Stop
+    316
+    317	0247  C1 E2 04			     shl dx, 4h
+    318	024A  AC			     lodsb
+    319	024B  3C 61			     cmp al, 'a'
+    320	024D  73 0B			     jae @@ProcessLetter
+    321
+    322	024F  2D 0030			     sub ax, '0'
+    323	0252  3D 000A			     cmp ax, 10
+    324	0255  73 11			     jae @@Error
+    325
+    326	0257  EB 09 90		     jmp @@EndNext
+    327	025A			     @@ProcessLetter:
+    328	025A  2D 0057			     sub ax, 'a' - 10
+    329	025D  A9 FFF0			     test ax, 0fff0h
+    330	0260  75 06			     jnz @@Error
+    331	0262			     @@EndNext:
+    332	0262  0B D0			     or	dx, ax
+    333
+    334	0264  EB DC			     jmp @@Next
+    335	0266			     @@Stop:
+    336
+    337	0266  46			     inc si ; skip space
+    338
+    339	0267  C3			     ret
+    340
+    341	0268			     @@Error:
+    342	0268  B8 4C01			     mov ax, 4c01h
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 7
+frame.asm
+
+
+
+    343	026B  CD 21			     int 21h
+    344
+    345	026D  C3			     ret ; desperate ret
+    346	026E				     endp
+    347
+    348				     ;-------------------
+    349				     ;Entry:
+    350				     ;	     DI	- offset to a string
+    351				     ;Assumes:
+    352				     ;	     ES	= DS
+    353				     ;Returns:
+    354				     ;	     AX	- string length
+    355				     ;Destr:
+    356				     ;	     CX, AX, DF
+    357				     ;-------------------
+    358	026E			     MyStrLen	     proc
+    359	026E  FC			     cld     ; clear direction flag
+    360
+    361	026F  33 C9			     xor cx, cx
+    362	0271  49			     dec cx  ; cx = -1
+    363
+    364	0272  B0 00			     mov al, 0d
+    365	0274			     @@Next:
+    366	0274  AE			     scasb   ; cmp al, es:[di++]
+    367	0275  E0 FD			     loopne @@Next
+    368
+    369	0277  F7 D9			     neg cx
+    370	0279  49			     dec cx ; retrieve string length
+    371	027A  49			     dec cx ; dont con
+    372
+    373	027B  8B C1			     mov ax, cx
+    374
+    375	027D  C3			     ret
+    376	027E				     endp
+    377
+    378	027E  DA C4 BF B3 20 B3	C0+  CntrlStringArr  db	'ÚÄ¿³ ³ÀÄÙ'
+    379	      C4 D9
+    380	0287  C9 CD BB BA 20 BA	C8+		     db	'ÉÍ»º ºÈÍ¼'
+    381	      CD BC
+    382	0290  2B 2D 2B 7C 20 7C	2B+		     db	'+-+| |+-+'
+    383	      2D 2B
+    384	0299  03 03 03 03 20 03	03+		     db	3h,3h,3h,3h,20h,3h,3h,3h,3h
+    385	      03 03
+    386	02A2  0D 0D 0D 0D 20 0D	0D+		     db	0dh,0dh,0dh,0dh,20h,0dh,0dh,0dh,0dh
+    387	      0D 0D
+    388	02AB  03 03 03 03 20 03	03+		     db	3h,3h,3h,3h,20h,3h,3h,3h,3h
+    389	      03 03
+    390
+    391	02B4  0019		     W_HGHT  dw	25d
+    392	02B6  0050		     W_WDTH  dw	80d
+    393
+    394	02B8  ??		     CLR_ATTRIBUTE   db	?
+    395	02B9  ????		     OFFST_FRAME     dw	?
+    396	02BB  ????		     OFFST_TEXT	     dw	?
+    397	02BD  ????		     F_HIGHT	     dw	?
+    398	02BF  ????		     F_WIDTH	     dw	?
+    399
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 8
+frame.asm
+
+
+
+    400	02C1  ????		     T_OFFSET	     dw	?
+    401	02C3  ????		     L_OFFSET	     dw	?
+    402
+    403				     end     Start
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 9
+Symbol Table
+
+
+
+
+Symbol Name			  Type	 Value
+
+??DATE				  Text	 "02/15/24"
+??FILENAME			  Text	 "frame	  "
+??TIME				  Text	 "21:52:30"
+??VERSION			  Number 040A
+@32BIT				  Text	 0
+@@ENDFUNC			  Near	 DGROUP:01DD
+@@ENDNEXT			  Near	 DGROUP:0262
+@@ERROR				  Near	 DGROUP:0268
+@@FUNCEND			  Near	 DGROUP:0223
+@@NEWFRAME			  Near	 DGROUP:021A
+@@NEXT				  Near	 DGROUP:012B
+@@NEXT				  Near	 DGROUP:014F
+@@NEXT				  Near	 DGROUP:01C9
+@@NEXT				  Near	 DGROUP:022C
+@@NEXT				  Near	 DGROUP:0242
+@@NEXT				  Near	 DGROUP:0274
+@@PROCESSLETTER			  Near	 DGROUP:025A
+@@STOP				  Near	 DGROUP:023C
+@@STOP				  Near	 DGROUP:0266
+@CODE				  Text	 DGROUP
+@CODESIZE			  Text	 0
+@CPU				  Text	 0707H
+@CURSEG				  Text	 _TEXT
+@DATA				  Text	 DGROUP
+@DATASIZE			  Text	 0
+@FILENAME			  Text	 FRAME
+@INTERFACE			  Text	 000H
+@MODEL				  Text	 1
+@STACK				  Text	 DGROUP
+@WORDSIZE			  Text	 2
+CLR_ATTRIBUTE			  Byte	 DGROUP:02B8
+CNTRLSTRINGARR			  Byte	 DGROUP:027E
+F_HIGHT				  Word	 DGROUP:02BD
+F_WIDTH				  Word	 DGROUP:02BF
+GETHEX				  Near	 DGROUP:023E
+GETNMBR				  Near	 DGROUP:0228
+L_OFFSET			  Word	 DGROUP:02C3
+MYSTRLEN			  Near	 DGROUP:026E
+NXTOFST				  Near	 DGROUP:01B6
+OFFST_FRAME			  Word	 DGROUP:02B9
+OFFST_TEXT			  Word	 DGROUP:02BB
+RDCMDLN				  Near	 DGROUP:01DE
+SETOFST				  Near	 DGROUP:016F
+SETOFSTTEXT			  Near	 DGROUP:0188
+SETTLOFST			  Near	 DGROUP:0156
+START				  Near	 DGROUP:0100
+T_OFFSET			  Word	 DGROUP:02C1
+WRTFRM				  Near	 DGROUP:011E
+WRTLINE				  Near	 DGROUP:0144
+WRTTEXT				  Near	 DGROUP:01C1
+W_HGHT				  Word	 DGROUP:02B4
+W_WDTH				  Word	 DGROUP:02B6
+Turbo Assembler	 Version 4.1	    02/15/24 21:52:31	    Page 10
+Symbol Table
+
+
+
+
+Groups & Segments		  Bit Size Align  Combine Class
+
+DGROUP				  Group
+  _DATA				  16  0000 Word	  Public  DATA
+  _TEXT				  16  02C5 Word	  Public  CODE
+
