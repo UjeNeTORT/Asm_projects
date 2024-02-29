@@ -154,16 +154,32 @@ WrtRegs proc
         mov di, bx
         mov si, offset RegNames ; axbxcx....
 
-        mov  cx, NREGS          ; all the regs as in turbodebugger
+        mov  cx, NREGS - 2      ; all the regs as in turbodebugger except ip, cs
 @@Next:
         call WrtReg             ; write ax: dead
         call SetBXNewLine       ; go next line
         mov  di, bx
         loop @@Next
 
+        ; Carefully print cs and ip vals.
+        ; This is done outside of the loop bcs cs and ip are in reverse order in stack
+
+        ; PRINT CS
+        add bp, 2               ; skip ip temporarily
+        call WrtReg
+        call SetBXNewLine
+        mov  di, bx
+
+        ; PRINT IP
+        sub bp, 4               ; subtract 4 = 2 + 2 (bp was increased by 2 in wrt reg)
+        call WrtReg
+        call SetBXNewLine
+        mov  di, bx
+
         pop si di cx bx
 
         ret
+
 WrtRegs endp
 
 ;-----------------------------------------------------------------------------------
@@ -414,8 +430,8 @@ RegNames        db  'ax'
                 db  'ds'
                 db  'es'
                 db  'ss'
-                db  'ip'
                 db  'cs'
+                db  'ip'
 HexNums         db '0123456789abcdef'
 DbgString       db 'debug is debil bug$'
 
