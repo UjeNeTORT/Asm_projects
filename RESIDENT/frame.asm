@@ -10,13 +10,12 @@ Start:
         ; ------------ IRQ 1 - KEYBOARD ------------
 
         mov ax, 3509h                   ; get interrupt vector (es - segment, bx - offset)
+        cli                             ; block interrupts
         int 21h
 
         mov Old09Ofs, bx                ; save old offset
         mov bx, es
         mov Old09Seg, bx                ; save old segment
-
-        cli                             ; block interrupts
 
         mov bx, 4 * 09h
         push 0                          ; es = 0 - PSP
@@ -34,13 +33,12 @@ Start:
         ; ------------ IRQ 0 - TIMER ------------
 
         mov ax, 3508h                   ; get interrupt vector (es - segment, bx - offset)
+        cli                             ; block interrupts
         int 21h
 
         mov Old08Ofs, bx                ; save old offset
         mov bx, es
         mov Old08Seg, bx                ; save old segment
-
-        cli                             ; block interrupts
 
         mov bx, 4 * 08h
         push 0                          ; es = 0 - PSP
@@ -66,6 +64,7 @@ Start:
 ; Int 09h extension which draws frame with current register values when hotkey is pressed
 ;
 ; Destr: -
+;
 ; QUESTION: is it ok to push ax once and then pop it twice (in different places)?
 ;-----------------------------------------------------------------------------------
 HotkeyFrame09   proc
@@ -75,7 +74,12 @@ HotkeyFrame09   proc
         cmp al, HOTKEY_SCN_CODE
         jne @@Std09
 
+        cmp al, HOTKEY_SCN_CODE + 128d
+        je @@DoNothing
+
         mov cs:IsFrameOn, 1d    ; raise flag
+
+@@DoNothing:
 
         in  al, 61h             ; blink Most Significant Bit (MSB) in kybd port controller
         or  al, 80h
@@ -102,7 +106,7 @@ HotkeyFrame09   endp
 ; Int 08h extenstion which refreshes the frame if IsFrameOn flag is raised
 ;
 ; Notes:
-;       ds = cs inside this procedure
+;       DS is being set to CS inside this procedure (and recovered later)
 ;-----------------------------------------------------------------------------------
 RefreshFrame08  proc
         cmp cs:IsFrameOn, 0d    ; if flag is down - jmp to std Int 08
@@ -133,7 +137,7 @@ Old08Seg        dw 0d   ; segment
 RefreshFrame08  endp
 
 ;-----------------------------------------------------------------------------------
-; given the frame is drawn, write text with registers and their values inside
+; given the frame is drawn, write text with registers and their values in it
 ;
 ; Entry:
 ;       AH - color attribute
@@ -183,16 +187,20 @@ WrtRegs proc
 WrtRegs endp
 
 ;-----------------------------------------------------------------------------------
-;Entry:
+; Entry:
 ;       AH - color attribute
-;       SI - registers control string offset
+;       SI - register names control string offset
 ;       DI - beginning position on screen
 ;
-;Assumes:
+; Assumes:
 ;       ES = 0b800h - VMem
 ;       DS = CS
 ;       BP points to position in stack where saved register values are
-;Destr: DI, SI, BP
+;
+; Note: DI and SI destruction is designed on purpose. Original values are recovered
+;               in parent function
+;
+; Destr: DI, SI, BP
 ;-----------------------------------------------------------------------------------
 WrtReg  proc
         push ax
@@ -212,7 +220,7 @@ WrtReg  proc
 
         ; -------------------------- WRITE REGISTER VALUE --------------------------
 
-        call WrtRegVal
+        call WrtRegVal                  ; dead hehehe
 
         pop ax
 
@@ -220,13 +228,12 @@ WrtReg  proc
 WrtReg  endp
 
 ;-----------------------------------------------------------------------------------
-;Entry:
-;       BP - index of register in stack (ax is at 0)
-;
-;Assumes:
-;       ES = 0b800h
+; Entry:
+;       BP - index of register in stack (ax is at 0 offset)
+; Assumes:
+;       ES = 0b800h - VMem
 ;       DS = CS
-;Destr: BP
+; Destr: BP
 ;-----------------------------------------------------------------------------------
 WrtRegVal       proc
         push ax dx si
@@ -288,7 +295,7 @@ WrtRegVal       proc
         lodsb
         stosw
 
-        add bp, 2               ; bp points to next register in stack   !!!
+        add bp, 2               ; bp points to next register in stack
 
         pop si dx ax
 
@@ -336,15 +343,17 @@ DrwFrm  proc
 DrwFrm  endp
 
 ;-----------------------------------------------------------------------------------
-;Entry:
+; Entry:
 ;       AH - color attribute
 ;       DS - segment where Control String is
 ;       SI - offset to Control String
 ;       DI - beginning position on screen
-;Assumes:
+; Assumes:
 ;       ES = 0b800h - VMem
-;
-;Destr: DI, SI, DF
+; Note:
+;       DI and SI destruction is designed on purpose. Original values are recovered
+;               in parent function
+; Destr: DI, SI, DF
 ;-----------------------------------------------------------------------------------
 WrtLine proc
         push ax cx
@@ -371,10 +380,10 @@ WrtLine endp
 
 ;-----------------------------------------------------------------------------------
 ; set bx to point to position on screen where frame begins (top left corner)
-;Assumes: -
-;Returns:
-;       bx - required position on screen
-;Destr: bx
+; Assumes: -
+; Returns:
+;       BX - required position on screen
+; Destr: BX
 ;-----------------------------------------------------------------------------------
 SetFrmBase      proc
         mov  bx, T_OFFSET
@@ -390,18 +399,20 @@ SetFrmBase      endp
 ; set bx to point to the same position of the next line
 ;Assumes: -
 ;Returns:
-;       bx - required position on screen
-;Destr: bx
+;       BX - required position on screen
+;Destr: BX
 ;-----------------------------------------------------------------------------------
 SetBXNewLine      proc
-
         add bx, 2 * 80d
+
         ret
 SetBXNewLine     endp
 
 ;-----------------------------------------------------------------------------------
-;
-;
+; write debug message to console
+; Assumes:
+;       DS = CS
+; Destr: -
 ;-----------------------------------------------------------------------------------
 WrtDbgMsg       proc
         push ax dx ds
